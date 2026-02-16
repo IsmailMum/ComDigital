@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER: EmailStr
     FIRST_SUPERUSER_PASSWORD: str
 
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_PASSWORD: str = ""
+    REDIS_CACHE_TTL: int = 300  # default TTL in seconds (5 minutes)
+
     POSTGRES_SERVER: str
     POSTGRES_PORT: int
     POSTGRES_USER: str
