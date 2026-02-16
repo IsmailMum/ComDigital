@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import uuid
 from typing import Any
 
@@ -13,6 +14,8 @@ from app.models import (
     Message, CategoryDensityResponse,
 )
 from app.utils import compute_category_density
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/items",
@@ -64,6 +67,7 @@ async def create_item(
 ) -> Any:
     item = await crud.create_item(session=session, item_in=item_in, owner_id=current_user.id)
     await _invalidate_items_cache(current_user.id)
+    logger.info("Item created: id=%s by user=%s", item.id, current_user.id)
     return item
 
 
@@ -81,8 +85,10 @@ async def get_items(
     )
     cached = await cache_get(cache_key)
     if cached is not None:
+        logger.debug("Cache HIT for items list: user=%s", current_user.id)
         return cached
 
+    logger.debug("Cache MISS for items list: user=%s", current_user.id)
     owner_id = None if current_user.is_superuser else current_user.id
     items = await crud.get_items(
         session=session, owner_id=owner_id, skip=skip, limit=limit,
@@ -99,12 +105,16 @@ async def get_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID
     cache_key = _detail_cache_key(current_user.id, id)
     cached = await cache_get(cache_key)
     if cached is not None:
+        logger.debug("Cache HIT for item detail: id=%s", id)
         return cached
 
+    logger.debug("Cache MISS for item detail: id=%s", id)
     item = await crud.get_item_by_id(session=session, item_id=id)
     if not item:
+        logger.warning("Item not found: id=%s requested by user=%s", id, current_user.id)
         raise ItemNotFoundError()
     if not current_user.is_superuser and (item.owner_id != current_user.id):
+        logger.warning("Permission denied: user=%s tried to access item=%s", current_user.id, id)
         raise PermissionDeniedError()
 
     item_data = ItemPublic.model_validate(item).model_dump(mode="json")
@@ -122,11 +132,14 @@ async def update_item(
 ) -> Any:
     item = await crud.get_item_for_update(session=session, item_id=id)
     if not item:
+        logger.warning("Item not found for update: id=%s by user=%s", id, current_user.id)
         raise ItemNotFoundError()
     if not current_user.is_superuser and (item.owner_id != current_user.id):
+        logger.warning("Permission denied: user=%s tried to update item=%s", current_user.id, id)
         raise PermissionDeniedError()
     item = await crud.update_item(session=session, db_item=item, item_in=item_in)
     await _invalidate_items_cache(item.owner_id)
+    logger.info("Item updated: id=%s by user=%s", id, current_user.id)
     return item
 
 
@@ -136,12 +149,15 @@ async def delete_item(
 ) -> Message:
     item = await crud.get_item_for_update(session=session, item_id=id)
     if not item:
+        logger.warning("Item not found for deletion: id=%s by user=%s", id, current_user.id)
         raise ItemNotFoundError()
     if not current_user.is_superuser and (item.owner_id != current_user.id):
+        logger.warning("Permission denied: user=%s tried to delete item=%s", current_user.id, id)
         raise PermissionDeniedError()
     owner_id = item.owner_id
     await crud.delete_item(session=session, item=item)
     await _invalidate_items_cache(owner_id)
+    logger.info("Item deleted: id=%s by user=%s", id, current_user.id)
     return Message(message="Item deleted successfully")
 
 
@@ -150,8 +166,10 @@ async def get_category_density(session: SessionDep, current_user: CurrentUser) -
     cache_key = _density_cache_key()
     cached = await cache_get(cache_key)
     if cached is not None:
+        logger.debug("Cache HIT for category density analytics")
         return cached
 
+    logger.debug("Cache MISS for category density analytics — computing")
     results = await crud.get_category_counts(session=session)
     response = await asyncio.to_thread(compute_category_density, results)
 

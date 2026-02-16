@@ -1,3 +1,4 @@
+import logging
 import uuid
 
 from sqlalchemy import func
@@ -10,6 +11,7 @@ from app.models import (
     Item, ItemCreate, ItemUpdate, ItemStatus, ItemCategory,
 )
 
+logger = logging.getLogger(__name__)
 
 
 async def create_user(*, session: AsyncSession, user_create: UserCreate) -> User:
@@ -19,13 +21,16 @@ async def create_user(*, session: AsyncSession, user_create: UserCreate) -> User
     session.add(db_obj)
     await session.commit()
     await session.refresh(db_obj)
+    logger.info("User created in DB: email=%s, id=%s", db_obj.email, db_obj.id)
     return db_obj
 
 
 async def get_user_by_email(*, session: AsyncSession, email: str) -> User | None:
     statement = select(User).where(User.email == email)
     result = await session.execute(statement)
-    return result.scalars().first()
+    user = result.scalars().first()
+    logger.debug("User lookup by email=%s: %s", email, "found" if user else "not found")
+    return user
 
 
 async def update_user(*, session: AsyncSession, db_user: User, user_in: UserUpdateMe) -> User:
@@ -34,6 +39,7 @@ async def update_user(*, session: AsyncSession, db_user: User, user_in: UserUpda
     session.add(db_user)
     await session.commit()
     await session.refresh(db_user)
+    logger.info("User updated in DB: id=%s, fields=%s", db_user.id, list(user_data.keys()))
     return db_user
 
 
@@ -48,15 +54,19 @@ async def authenticate(*, session: AsyncSession, email: str, password: str) -> U
         # Prevent timing attacks by running password verification even when user doesn't exist
         # This ensures the response time is similar whether or not the email exists
         verify_password(password, DUMMY_HASH)
+        logger.debug("Authentication failed: email=%s not found", email)
         return None
     verified, updated_password_hash = verify_password(password, db_user.hashed_password)
     if not verified:
+        logger.debug("Authentication failed: wrong password for email=%s", email)
         return None
     if updated_password_hash:
         db_user.hashed_password = updated_password_hash
         session.add(db_user)
         await session.commit()
         await session.refresh(db_user)
+        logger.debug("Password hash upgraded for user id=%s", db_user.id)
+    logger.debug("Authentication succeeded for email=%s", email)
     return db_user
 
 
@@ -67,6 +77,7 @@ async def create_item(
     session.add(item)
     await session.commit()
     await session.refresh(item)
+    logger.info("Item created in DB: id=%s, owner=%s", item.id, owner_id)
     return item
 
 
@@ -91,18 +102,27 @@ async def get_items(
 
     statement = statement.order_by(col(Item.created_at).desc()).offset(skip).limit(limit)
     result = await session.execute(statement)
-    return list(result.scalars().all())
+    items = list(result.scalars().all())
+    logger.debug(
+        "Items fetched from DB: count=%d, owner=%s, skip=%d, limit=%d",
+        len(items), owner_id, skip, limit,
+    )
+    return items
 
 
 async def get_item_by_id(*, session: AsyncSession, item_id: uuid.UUID) -> Item | None:
-    return await session.get(Item, item_id)
+    item = await session.get(Item, item_id)
+    logger.debug("Item lookup by id=%s: %s", item_id, "found" if item else "not found")
+    return item
 
 
 async def get_item_for_update(*, session: AsyncSession, item_id: uuid.UUID) -> Item | None:
     """Fetch an item with a ``SELECT … FOR UPDATE`` row-level lock."""
     statement = select(Item).where(Item.id == item_id).with_for_update()
     result = await session.execute(statement)
-    return result.scalars().first()
+    item = result.scalars().first()
+    logger.debug("Item locked for update id=%s: %s", item_id, "found" if item else "not found")
+    return item
 
 
 async def update_item(
@@ -113,15 +133,20 @@ async def update_item(
     session.add(db_item)
     await session.commit()
     await session.refresh(db_item)
+    logger.info("Item updated in DB: id=%s, fields=%s", db_item.id, list(update_dict.keys()))
     return db_item
 
 
 async def delete_item(*, session: AsyncSession, item: Item) -> None:
+    item_id = item.id
     await session.delete(item)
     await session.commit()
+    logger.info("Item deleted from DB: id=%s", item_id)
 
 
 async def get_category_counts(*, session: AsyncSession) -> list:
     statement = select(Item.category, func.count().label("count")).group_by(Item.category)
     result = await session.execute(statement)
-    return list(result.all())
+    counts = list(result.all())
+    logger.debug("Category counts fetched: %d categories", len(counts))
+    return counts

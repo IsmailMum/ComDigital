@@ -119,6 +119,26 @@ class CategoryDensityResponse(SQLModel):
     data: CategoryDensityData
 
 
+class LogEntry(SQLModel, table=True):
+    __tablename__ = "log_entry"
+
+    id: int | None = Field(default=None, primary_key=True)
+    timestamp: datetime = Field(
+        default_factory=get_datetime_utc,
+        sa_type=DateTime(timezone=True),
+    )
+    level: str = Field(max_length=10)
+    logger_name: str = Field(max_length=255)
+    message: str
+    method: str | None = Field(default=None, max_length=10)
+    path: str | None = Field(default=None, max_length=2048)
+    status_code: int | None = Field(default=None)
+    duration_ms: float | None = Field(default=None)
+    client_ip: str | None = Field(default=None, max_length=45)
+    request_id: str | None = Field(default=None, max_length=36)
+    exception: str | None = Field(default=None)
+
+
 class Message(SQLModel):
     message: str
 
