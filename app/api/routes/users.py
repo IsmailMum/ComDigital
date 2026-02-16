@@ -31,7 +31,7 @@ async def register_user(session: SessionDep, user_in: UserRegister) -> Any:
 
 
 @router.post("/login")
-async def login_access_token(
+async def login(
     session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 ) -> Token:
     """
