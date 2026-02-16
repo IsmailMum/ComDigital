@@ -97,3 +97,28 @@ class ItemPublic(ItemBase):
     id: uuid.UUID
     owner_id: uuid.UUID
     created_at: datetime | None = None
+
+
+class ItemUpdate(ItemBase):
+    title: str | None = Field(default=None, min_length=1, max_length=255)
+
+
+class CategoryDensityItem(SQLModel):
+    category: str
+    count: int
+    percentage: float
+
+
+class CategoryDensityData(SQLModel):
+    total_items: int
+    categories: list[CategoryDensityItem]
+
+
+class CategoryDensityResponse(SQLModel):
+    success: bool
+    data: CategoryDensityData
+
+
+class Message(SQLModel):
+    message: str
+

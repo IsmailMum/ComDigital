@@ -53,12 +53,12 @@ async def login(
 
 
 @router.get("/profile", response_model=UserPublic)
-async def read_current_user(current_user: CurrentUser) -> Any:
+async def get_current_user(current_user: CurrentUser) -> Any:
     return current_user
 
 
 @router.patch("/profile", response_model=UserPublic)
-async def update_user_me(
+async def update_current_user(
     *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser
 ) -> Any:
     user_data = user_in.model_dump(exclude_unset=True)
