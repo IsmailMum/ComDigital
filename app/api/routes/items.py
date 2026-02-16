@@ -2,11 +2,12 @@ import asyncio
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 
 from app import crud
 from app.api.dependencies import SessionDep, CurrentUser
 from app.core.cache import cache_get, cache_set, cache_delete_pattern
+from app.core.exceptions import ItemNotFoundError, PermissionDeniedError
 from app.models import (
     ItemCreate, ItemPublic, ItemUpdate, ItemStatus, ItemCategory,
     Message, CategoryDensityResponse,
@@ -102,9 +103,9 @@ async def get_item(session: SessionDep, current_user: CurrentUser, id: uuid.UUID
 
     item = await crud.get_item_by_id(session=session, item_id=id)
     if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise ItemNotFoundError()
     if not current_user.is_superuser and (item.owner_id != current_user.id):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+        raise PermissionDeniedError()
 
     item_data = ItemPublic.model_validate(item).model_dump(mode="json")
     await cache_set(cache_key, item_data)
@@ -121,9 +122,9 @@ async def update_item(
 ) -> Any:
     item = await crud.get_item_for_update(session=session, item_id=id)
     if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise ItemNotFoundError()
     if not current_user.is_superuser and (item.owner_id != current_user.id):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+        raise PermissionDeniedError()
     item = await crud.update_item(session=session, db_item=item, item_in=item_in)
     await _invalidate_items_cache(item.owner_id)
     return item
@@ -135,9 +136,9 @@ async def delete_item(
 ) -> Message:
     item = await crud.get_item_for_update(session=session, item_id=id)
     if not item:
-        raise HTTPException(status_code=404, detail="Item not found")
+        raise ItemNotFoundError()
     if not current_user.is_superuser and (item.owner_id != current_user.id):
-        raise HTTPException(status_code=403, detail="Not enough permissions")
+        raise PermissionDeniedError()
     owner_id = item.owner_id
     await crud.delete_item(session=session, item=item)
     await _invalidate_items_cache(owner_id)
