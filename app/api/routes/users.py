@@ -1,7 +1,7 @@
 from datetime import timedelta
 from typing import Any, Annotated
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.exc import IntegrityError
 
@@ -9,6 +9,11 @@ from app import crud
 from app.api.dependencies import SessionDep, CurrentUser
 from app.core import security
 from app.core.config import settings
+from app.core.exceptions import (
+    UserAlreadyExistsError,
+    InvalidCredentialsError,
+    InactiveUserError,
+)
 from app.models import UserPublic, UserRegister, UserCreate, Token, UserUpdateMe
 
 router = APIRouter(
@@ -22,17 +27,14 @@ async def register_user(session: SessionDep, user_in: UserRegister) -> Any:
 
     user = await crud.get_user_by_email(session=session, email=user_in.email)
     if user:
-        raise HTTPException(
-            status_code=400,
-            detail="The user with this email already exists in the system",
-        )
+        raise UserAlreadyExistsError()
 
     try:
         user_create = UserCreate.model_validate(user_in)
         user = await crud.create_user(session=session, user_create=user_create)
     except IntegrityError:
         await session.rollback()
-        raise HTTPException(status_code=400, detail="The user with this email already exists in the system")
+        raise UserAlreadyExistsError()
     return user
 
 
@@ -47,9 +49,9 @@ async def login(
         session=session, email=form_data.username, password=form_data.password
     )
     if not user:
-        raise HTTPException(status_code=400, detail="Incorrect email or password")
+        raise InvalidCredentialsError()
     elif not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise InactiveUserError()
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return Token(
         access_token=security.create_access_token(

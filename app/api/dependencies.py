@@ -2,7 +2,7 @@ from typing import Annotated
 
 import jwt
 import redis.asyncio as aioredis
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
 from jwt import InvalidTokenError
 from pydantic import ValidationError
@@ -12,6 +12,11 @@ from app.core import security
 from app.core.cache import get_redis
 from app.core.config import settings
 from app.core.db import async_session
+from app.core.exceptions import (
+    CredentialsValidationError,
+    UserNotFoundError,
+    InactiveUserError,
+)
 from app.models import User, TokenPayload
 
 reusable_oauth2 = OAuth2PasswordBearer(
@@ -33,15 +38,12 @@ async def get_current_user(session: SessionDep, token: TokenDep) -> User:
         )
         token_data = TokenPayload(**payload)
     except (InvalidTokenError, ValidationError):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Could not validate credentials",
-        )
+        raise CredentialsValidationError()
     user = await session.get(User, token_data.sub)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise UserNotFoundError()
     if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+        raise InactiveUserError()
     return user
 
 
