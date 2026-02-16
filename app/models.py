@@ -42,3 +42,6 @@ class User(UserBase, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
 
+class UserPublic(UserBase):
+    id: uuid.UUID
+    created_at: datetime | None = None
