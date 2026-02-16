@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     FIRST_SUPERUSER: EmailStr
     FIRST_SUPERUSER_PASSWORD: str
 
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "console"  # "console" for development, "json" for production
+
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_PASSWORD: str = ""

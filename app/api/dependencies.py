@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 import jwt
@@ -19,6 +20,8 @@ from app.core.exceptions import (
 )
 from app.models import User, TokenPayload
 
+logger = logging.getLogger(__name__)
+
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/users/login"
 )
@@ -38,12 +41,16 @@ async def get_current_user(session: SessionDep, token: TokenDep) -> User:
         )
         token_data = TokenPayload(**payload)
     except (InvalidTokenError, ValidationError):
+        logger.warning("Token validation failed: invalid or expired token")
         raise CredentialsValidationError()
     user = await session.get(User, token_data.sub)
     if not user:
+        logger.warning("Token references non-existent user: sub=%s", token_data.sub)
         raise UserNotFoundError()
     if not user.is_active:
+        logger.warning("Token belongs to inactive user: id=%s", user.id)
         raise InactiveUserError()
+    logger.debug("Authenticated user from token: id=%s, email=%s", user.id, user.email)
     return user
 
 

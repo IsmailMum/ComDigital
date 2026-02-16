@@ -1,3 +1,4 @@
+import logging
 from datetime import timedelta
 from typing import Any, Annotated
 
@@ -16,6 +17,8 @@ from app.core.exceptions import (
 )
 from app.models import UserPublic, UserRegister, UserCreate, Token, UserUpdateMe
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(
     prefix="/users",
     tags=["users"]
@@ -27,13 +30,16 @@ async def register_user(session: SessionDep, user_in: UserRegister) -> Any:
 
     user = await crud.get_user_by_email(session=session, email=user_in.email)
     if user:
+        logger.warning("Registration attempt with existing email: %s", user_in.email)
         raise UserAlreadyExistsError()
 
     try:
         user_create = UserCreate.model_validate(user_in)
         user = await crud.create_user(session=session, user_create=user_create)
+        logger.info("New user registered: %s (id=%s)", user.email, user.id)
     except IntegrityError:
         await session.rollback()
+        logger.warning("Registration race condition for email: %s", user_in.email)
         raise UserAlreadyExistsError()
     return user
 
@@ -49,10 +55,13 @@ async def login(
         session=session, email=form_data.username, password=form_data.password
     )
     if not user:
+        logger.warning("Failed login attempt for email: %s", form_data.username)
         raise InvalidCredentialsError()
     elif not user.is_active:
+        logger.warning("Login attempt by inactive user: %s (id=%s)", user.email, user.id)
         raise InactiveUserError()
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    logger.info("User logged in: %s (id=%s)", user.email, user.id)
     return Token(
         access_token=security.create_access_token(
             user.id, expires_delta=access_token_expires
@@ -62,6 +71,7 @@ async def login(
 
 @router.get("/profile", response_model=UserPublic)
 async def get_current_user(current_user: CurrentUser) -> Any:
+    logger.debug("Profile accessed by user: %s (id=%s)", current_user.email, current_user.id)
     return current_user
 
 
@@ -69,4 +79,5 @@ async def get_current_user(current_user: CurrentUser) -> Any:
 async def update_current_user(
     *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser
 ) -> Any:
+    logger.info("User profile updated: %s (id=%s)", current_user.email, current_user.id)
     return await crud.update_user(session=session, db_user=current_user, user_in=user_in)
