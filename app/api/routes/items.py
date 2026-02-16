@@ -126,11 +126,7 @@ async def update_item(
         raise HTTPException(status_code=404, detail="Item not found")
     if not current_user.is_superuser and (item.owner_id != current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
-    update_dict = item_in.model_dump(exclude_unset=True)
-    item.sqlmodel_update(update_dict)
-    session.add(item)
-    await session.commit()
-    await session.refresh(item)
+    item = await crud.update_item(session=session, db_item=item, item_in=item_in)
     await _invalidate_items_cache(item.owner_id)
     return item
 
