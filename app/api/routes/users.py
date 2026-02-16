@@ -15,27 +15,29 @@ router = APIRouter(
     tags=["users"]
 )
 
-@router.post("/register", response_model=UserPublic)
-def register_user(session: SessionDep, user_in: UserRegister) -> Any:
 
-    user = crud.get_user_by_email(session=session, email=user_in.email)
+@router.post("/register", response_model=UserPublic)
+async def register_user(session: SessionDep, user_in: UserRegister) -> Any:
+
+    user = await crud.get_user_by_email(session=session, email=user_in.email)
     if user:
         raise HTTPException(
             status_code=400,
             detail="The user with this email already exists in the system",
         )
     user_create = UserCreate.model_validate(user_in)
-    user = crud.create_user(session=session, user_create=user_create)
+    user = await crud.create_user(session=session, user_create=user_create)
     return user
 
+
 @router.post("/login")
-def login_access_token(
+async def login_access_token(
     session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
 ) -> Token:
     """
     OAuth2 compatible token login, get an access token for future requests
     """
-    user = crud.authenticate(
+    user = await crud.authenticate(
         session=session, email=form_data.username, password=form_data.password
     )
     if not user:
