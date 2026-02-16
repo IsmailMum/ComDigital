@@ -53,6 +53,7 @@ class User(UserBase, table=True):
         default_factory=get_datetime_utc,
         sa_type=DateTime(timezone=True),  # type: ignore
     )
+    items: list["Item"] = Relationship(back_populates="owner", cascade_delete=True)
 
 
 class UserPublic(UserBase):
