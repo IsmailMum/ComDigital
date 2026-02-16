@@ -1,23 +1,25 @@
-from sqlmodel import Session, select, create_engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
+from sqlmodel import select
 
 from app import crud
 from app.core.config import settings
 from app.models import User, UserCreate
 
-engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+engine = create_async_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
-def init_db(session: Session) -> None:
-
-    superuser = session.exec(
-        select(User).where(User.is_superuser == True)
-    ).first()
-
-    if not superuser:
-        superuser = UserCreate(
-            email=settings.FIRST_SUPERUSER,
-            password=settings.FIRST_SUPERUSER_PASSWORD,
-            is_superuser=True,
+async def init_db() -> None:
+    async with async_session() as session:
+        result = await session.execute(
+            select(User).where(User.is_superuser == True)
         )
+        superuser = result.scalars().first()
 
-        crud.create_user(session=session, user_create=superuser)
+        if not superuser:
+            user_create = UserCreate(
+                email=settings.FIRST_SUPERUSER,
+                password=settings.FIRST_SUPERUSER_PASSWORD,
+                is_superuser=True,
+            )
+            await crud.create_user(session=session, user_create=user_create)
