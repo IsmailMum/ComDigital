@@ -5,10 +5,10 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app import crud
-from app.api.dependencies import SessionDep
+from app.api.dependencies import SessionDep, CurrentUser
 from app.core import security
 from app.core.config import settings
-from app.models import UserPublic, UserRegister, UserCreate, Token
+from app.models import UserPublic, UserRegister, UserCreate, Token, UserUpdateMe
 
 router = APIRouter(
     prefix="/users",
@@ -50,3 +50,20 @@ async def login_access_token(
             user.id, expires_delta=access_token_expires
         )
     )
+
+
+@router.get("/profile", response_model=UserPublic)
+async def read_current_user(current_user: CurrentUser) -> Any:
+    return current_user
+
+
+@router.patch("/profile", response_model=UserPublic)
+async def update_user_me(
+    *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser
+) -> Any:
+    user_data = user_in.model_dump(exclude_unset=True)
+    current_user.sqlmodel_update(user_data)
+    session.add(current_user)
+    await session.commit()
+    await session.refresh(current_user)
+    return current_user
