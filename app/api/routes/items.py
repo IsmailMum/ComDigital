@@ -3,13 +3,12 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import func
-from sqlmodel import select, col
 
+from app import crud
 from app.api.dependencies import SessionDep, CurrentUser
 from app.core.cache import cache_get, cache_set, cache_delete_pattern
 from app.models import (
-    ItemCreate, Item, ItemPublic, ItemUpdate, ItemStatus, ItemCategory,
+    ItemCreate, ItemPublic, ItemUpdate, ItemStatus, ItemCategory,
     Message, CategoryDensityResponse,
 )
 from app.utils import compute_category_density
@@ -62,10 +61,8 @@ async def _invalidate_items_cache(owner_id: uuid.UUID) -> None:
 async def create_item(
     *, session: SessionDep, current_user: CurrentUser, item_in: ItemCreate
 ) -> Any:
-    item = Item.model_validate(item_in, update={"owner_id": current_user.id})
-    session.add(item)
-    await session.commit()
-    await session.refresh(item)
+    item = await crud.create_item(session=session, item_in=item_in, owner_id=current_user.id)
+    await _invalidate_items_cache(current_user.id)
     return item
 
 
@@ -85,10 +82,11 @@ async def get_items(
     if cached is not None:
         return cached
 
-    if status is not None:
-        statement = statement.where(Item.status == status)
-    if category is not None:
-        statement = statement.where(Item.category == category)
+    owner_id = None if current_user.is_superuser else current_user.id
+    items = await crud.get_items(
+        session=session, owner_id=owner_id, skip=skip, limit=limit,
+        status=status, category=category,
+    )
 
     items_data = [ItemPublic.model_validate(i).model_dump(mode="json") for i in items]
     await cache_set(cache_key, items_data)
@@ -118,10 +116,10 @@ async def update_item(
     *,
     session: SessionDep,
     current_user: CurrentUser,
-    item_id: uuid.UUID,
+    id: uuid.UUID,
     item_in: ItemUpdate,
 ) -> Any:
-    item = await session.get(Item, item_id)
+    item = await crud.get_item_for_update(session=session, item_id=id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     if not current_user.is_superuser and (item.owner_id != current_user.id):
@@ -135,13 +133,14 @@ async def update_item(
 async def delete_item(
     session: SessionDep, current_user: CurrentUser, id: uuid.UUID
 ) -> Message:
-    item = await session.get(Item, id)
+    item = await crud.get_item_for_update(session=session, item_id=id)
     if not item:
         raise HTTPException(status_code=404, detail="Item not found")
     if not current_user.is_superuser and (item.owner_id != current_user.id):
         raise HTTPException(status_code=403, detail="Not enough permissions")
-    await session.delete(item)
-    await session.commit()
+    owner_id = item.owner_id
+    await crud.delete_item(session=session, item=item)
+    await _invalidate_items_cache(owner_id)
     return Message(message="Item deleted successfully")
 
 

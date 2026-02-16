@@ -3,6 +3,7 @@ from typing import Any, Annotated
 
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy.exc import IntegrityError
 
 from app import crud
 from app.api.dependencies import SessionDep, CurrentUser
@@ -25,8 +26,13 @@ async def register_user(session: SessionDep, user_in: UserRegister) -> Any:
             status_code=400,
             detail="The user with this email already exists in the system",
         )
-    user_create = UserCreate.model_validate(user_in)
-    user = await crud.create_user(session=session, user_create=user_create)
+
+    try:
+        user_create = UserCreate.model_validate(user_in)
+        user = await crud.create_user(session=session, user_create=user_create)
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(status_code=400, detail="The user with this email already exists in the system")
     return user
 
 
@@ -61,9 +67,4 @@ async def get_current_user(current_user: CurrentUser) -> Any:
 async def update_current_user(
     *, session: SessionDep, user_in: UserUpdateMe, current_user: CurrentUser
 ) -> Any:
-    user_data = user_in.model_dump(exclude_unset=True)
-    current_user.sqlmodel_update(user_data)
-    session.add(current_user)
-    await session.commit()
-    await session.refresh(current_user)
-    return current_user
+    return await crud.update_user(session=session, db_user=current_user, user_in=user_in)
