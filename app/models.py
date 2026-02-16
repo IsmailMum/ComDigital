@@ -42,6 +42,16 @@ class User(UserBase, table=True):
         sa_type=DateTime(timezone=True),  # type: ignore
     )
 
+
 class UserPublic(UserBase):
     id: uuid.UUID
     created_at: datetime | None = None
+
+
+class Token(SQLModel):
+    access_token: str
+    token_type: str = "bearer"
+
+
+class TokenPayload(SQLModel):
+    sub: str | None = None
