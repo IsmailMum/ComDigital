@@ -27,3 +27,9 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 redis==5.2.1
 uvicorn==0.40.0
+# Test dependencies
+pytest
+pytest-asyncio
+httpx
+aiosqlite
+pytest-cov
